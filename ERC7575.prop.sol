@@ -17,11 +17,12 @@ interface IERC20 {
 }
 
 // TODO: use interface provided by forge-std v1.0.0 or later
-// import {IERC4626} from "forge-std/interfaces/IERC4626.sol";
-interface IERC4626 is IERC20 {
+// import {IERC7575} from "forge-std/interfaces/IERC7575.sol";
+interface IERC7575 {
     event Deposit(address indexed caller, address indexed owner, uint assets, uint shares);
     event Withdraw(address indexed caller, address indexed receiver, address indexed owner, uint assets, uint shares);
     function asset() external view returns (address assetTokenAddress);
+    function share() external view returns (address shareTokenAddress);
     function totalAssets() external view returns (uint totalManagedAssets);
     function convertToShares(uint assets) external view returns (uint shares);
     function convertToAssets(uint shares) external view returns (uint assets);
@@ -39,11 +40,12 @@ interface IERC4626 is IERC20 {
     function redeem(uint shares, address receiver, address owner) external returns (uint assets);
 }
 
-abstract contract ERC4626Prop is Test {
+abstract contract ERC7575Prop is Test {
     uint internal _delta_;
 
     address internal _underlying_;
     address internal _vault_;
+    address internal _share_;
 
     bool internal _vaultMayBeEmpty;
     bool internal _unlimitedAmount;
@@ -55,13 +57,13 @@ abstract contract ERC4626Prop is Test {
     // asset
     // "MUST NOT revert."
     function prop_asset(address caller) public {
-        vm.prank(caller); IERC4626(_vault_).asset();
+        vm.prank(caller); IERC7575(_vault_).asset();
     }
 
     // totalAssets
     // "MUST NOT revert."
     function prop_totalAssets(address caller) public {
-        vm.prank(caller); IERC4626(_vault_).totalAssets();
+        vm.prank(caller); IERC7575(_vault_).totalAssets();
     }
 
     //
@@ -91,7 +93,7 @@ abstract contract ERC4626Prop is Test {
     // maxDeposit
     // "MUST NOT revert."
     function prop_maxDeposit(address caller, address receiver) public {
-        vm.prank(caller); IERC4626(_vault_).maxDeposit(receiver);
+        vm.prank(caller); IERC7575(_vault_).maxDeposit(receiver);
     }
 
     // previewDeposit
@@ -108,13 +110,13 @@ abstract contract ERC4626Prop is Test {
     // deposit
     function prop_deposit(address caller, address receiver, uint assets) public {
         uint oldCallerAsset = IERC20(_underlying_).balanceOf(caller);
-        uint oldReceiverShare = IERC20(_vault_).balanceOf(receiver);
+        uint oldReceiverShare = IERC20(_share_).balanceOf(receiver);
         uint oldAllowance = IERC20(_underlying_).allowance(caller, _vault_);
 
         vm.prank(caller); uint shares = vault_deposit(assets, receiver);
 
         uint newCallerAsset = IERC20(_underlying_).balanceOf(caller);
-        uint newReceiverShare = IERC20(_vault_).balanceOf(receiver);
+        uint newReceiverShare = IERC20(_share_).balanceOf(receiver);
         uint newAllowance = IERC20(_underlying_).allowance(caller, _vault_);
 
         assertApproxEqAbs(newCallerAsset, oldCallerAsset - assets, _delta_, "asset"); // NOTE: this may fail if the caller is a contract in which the asset is stored
@@ -129,7 +131,7 @@ abstract contract ERC4626Prop is Test {
     // maxMint
     // "MUST NOT revert."
     function prop_maxMint(address caller, address receiver) public {
-        vm.prank(caller); IERC4626(_vault_).maxMint(receiver);
+        vm.prank(caller); IERC7575(_vault_).maxMint(receiver);
     }
 
     // previewMint
@@ -146,13 +148,13 @@ abstract contract ERC4626Prop is Test {
     // mint
     function prop_mint(address caller, address receiver, uint shares) public {
         uint oldCallerAsset = IERC20(_underlying_).balanceOf(caller);
-        uint oldReceiverShare = IERC20(_vault_).balanceOf(receiver);
+        uint oldReceiverShare = IERC20(_share_).balanceOf(receiver);
         uint oldAllowance = IERC20(_underlying_).allowance(caller, _vault_);
 
         vm.prank(caller); uint assets = vault_mint(shares, receiver);
 
         uint newCallerAsset = IERC20(_underlying_).balanceOf(caller);
-        uint newReceiverShare = IERC20(_vault_).balanceOf(receiver);
+        uint newReceiverShare = IERC20(_share_).balanceOf(receiver);
         uint newAllowance = IERC20(_underlying_).allowance(caller, _vault_);
 
         assertApproxEqAbs(newCallerAsset, oldCallerAsset - assets, _delta_, "asset"); // NOTE: this may fail if the caller is a contract in which the asset is stored
@@ -168,7 +170,7 @@ abstract contract ERC4626Prop is Test {
     // "MUST NOT revert."
     // NOTE: some implementations failed due to arithmetic overflow
     function prop_maxWithdraw(address caller, address owner) public {
-        vm.prank(caller); IERC4626(_vault_).maxWithdraw(owner);
+        vm.prank(caller); IERC7575(_vault_).maxWithdraw(owner);
     }
 
     // previewWithdraw
@@ -185,14 +187,14 @@ abstract contract ERC4626Prop is Test {
     // withdraw
     function prop_withdraw(address caller, address receiver, address owner, uint assets) public {
         uint oldReceiverAsset = IERC20(_underlying_).balanceOf(receiver);
-        uint oldOwnerShare = IERC20(_vault_).balanceOf(owner);
-        uint oldAllowance = IERC20(_vault_).allowance(owner, caller);
+        uint oldOwnerShare = IERC20(_share_).balanceOf(owner);
+        uint oldAllowance = IERC20(_share_).allowance(owner, caller);
 
         vm.prank(caller); uint shares = vault_withdraw(assets, receiver, owner);
 
         uint newReceiverAsset = IERC20(_underlying_).balanceOf(receiver);
-        uint newOwnerShare = IERC20(_vault_).balanceOf(owner);
-        uint newAllowance = IERC20(_vault_).allowance(owner, caller);
+        uint newOwnerShare = IERC20(_share_).balanceOf(owner);
+        uint newAllowance = IERC20(_share_).allowance(owner, caller);
 
         assertApproxEqAbs(newOwnerShare, oldOwnerShare - shares, _delta_, "share");
         assertApproxEqAbs(newReceiverAsset, oldReceiverAsset + assets, _delta_, "asset"); // NOTE: this may fail if the receiver is a contract in which the asset is stored
@@ -208,7 +210,7 @@ abstract contract ERC4626Prop is Test {
     // maxRedeem
     // "MUST NOT revert."
     function prop_maxRedeem(address caller, address owner) public {
-        vm.prank(caller); IERC4626(_vault_).maxRedeem(owner);
+        vm.prank(caller); IERC7575(_vault_).maxRedeem(owner);
     }
 
     // previewRedeem
@@ -225,14 +227,14 @@ abstract contract ERC4626Prop is Test {
     // redeem
     function prop_redeem(address caller, address receiver, address owner, uint shares) public {
         uint oldReceiverAsset = IERC20(_underlying_).balanceOf(receiver);
-        uint oldOwnerShare = IERC20(_vault_).balanceOf(owner);
-        uint oldAllowance = IERC20(_vault_).allowance(owner, caller);
+        uint oldOwnerShare = IERC20(_share_).balanceOf(owner);
+        uint oldAllowance = IERC20(_share_).allowance(owner, caller);
 
         vm.prank(caller); uint assets = vault_redeem(shares, receiver, owner);
 
         uint newReceiverAsset = IERC20(_underlying_).balanceOf(receiver);
-        uint newOwnerShare = IERC20(_vault_).balanceOf(owner);
-        uint newAllowance = IERC20(_vault_).allowance(owner, caller);
+        uint newOwnerShare = IERC20(_share_).balanceOf(owner);
+        uint newAllowance = IERC20(_share_).allowance(owner, caller);
 
         assertApproxEqAbs(newOwnerShare, oldOwnerShare - shares, _delta_, "share");
         assertApproxEqAbs(newReceiverAsset, oldReceiverAsset + assets, _delta_, "asset"); // NOTE: this may fail if the receiver is a contract in which the asset is stored
@@ -247,7 +249,7 @@ abstract contract ERC4626Prop is Test {
 
     // redeem(deposit(a)) <= a
     function prop_RT_deposit_redeem(address caller, uint assets) public {
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint shares = vault_deposit(assets, caller);
         vm.prank(caller); uint assets2 = vault_redeem(shares, caller, caller);
         assertApproxLeAbs(assets2, assets, _delta_);
@@ -257,7 +259,7 @@ abstract contract ERC4626Prop is Test {
     // s' = withdraw(a)
     // s' >= s
     function prop_RT_deposit_withdraw(address caller, uint assets) public {
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint shares1 = vault_deposit(assets, caller);
         vm.prank(caller); uint shares2 = vault_withdraw(assets, caller, caller);
         assertApproxGeAbs(shares2, shares1, _delta_);
@@ -266,7 +268,7 @@ abstract contract ERC4626Prop is Test {
     // deposit(redeem(s)) <= s
     function prop_RT_redeem_deposit(address caller, uint shares) public {
         vm.prank(caller); uint assets = vault_redeem(shares, caller, caller);
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint shares2 = vault_deposit(assets, caller);
         assertApproxLeAbs(shares2, shares, _delta_);
     }
@@ -276,14 +278,14 @@ abstract contract ERC4626Prop is Test {
     // a' >= a
     function prop_RT_redeem_mint(address caller, uint shares) public {
         vm.prank(caller); uint assets1 = vault_redeem(shares, caller, caller);
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint assets2 = vault_mint(shares, caller);
         assertApproxGeAbs(assets2, assets1, _delta_);
     }
 
     // withdraw(mint(s)) >= s
     function prop_RT_mint_withdraw(address caller, uint shares) public {
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint assets = vault_mint(shares, caller);
         vm.prank(caller); uint shares2 = vault_withdraw(assets, caller, caller);
         assertApproxGeAbs(shares2, shares, _delta_);
@@ -293,7 +295,7 @@ abstract contract ERC4626Prop is Test {
     // a' = redeem(s)
     // a' <= a
     function prop_RT_mint_redeem(address caller, uint shares) public {
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint assets1 = vault_mint(shares, caller);
         vm.prank(caller); uint assets2 = vault_redeem(shares, caller, caller);
         assertApproxLeAbs(assets2, assets1, _delta_);
@@ -302,7 +304,7 @@ abstract contract ERC4626Prop is Test {
     // mint(withdraw(a)) >= a
     function prop_RT_withdraw_mint(address caller, uint assets) public {
         vm.prank(caller); uint shares = vault_withdraw(assets, caller, caller);
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint assets2 = vault_mint(shares, caller);
         assertApproxGeAbs(assets2, assets, _delta_);
     }
@@ -312,7 +314,7 @@ abstract contract ERC4626Prop is Test {
     // s' <= s
     function prop_RT_withdraw_deposit(address caller, uint assets) public {
         vm.prank(caller); uint shares1 = vault_withdraw(assets, caller, caller);
-        if (!_vaultMayBeEmpty) vm.assume(IERC20(_vault_).totalSupply() > 0);
+        if (!_vaultMayBeEmpty) vm.assume(IERC20(_share_).totalSupply() > 0);
         vm.prank(caller); uint shares2 = vault_deposit(assets, caller);
         assertApproxLeAbs(shares2, shares1, _delta_);
     }
@@ -322,49 +324,49 @@ abstract contract ERC4626Prop is Test {
     //
 
     function vault_convertToShares(uint assets) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.convertToShares.selector, assets));
+        return _call_vault(abi.encodeWithSelector(IERC7575.convertToShares.selector, assets));
     }
     function vault_convertToAssets(uint shares) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.convertToAssets.selector, shares));
+        return _call_vault(abi.encodeWithSelector(IERC7575.convertToAssets.selector, shares));
     }
 
     function vault_maxDeposit(address receiver) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.maxDeposit.selector, receiver));
+        return _call_vault(abi.encodeWithSelector(IERC7575.maxDeposit.selector, receiver));
     }
     function vault_maxMint(address receiver) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.maxMint.selector, receiver));
+        return _call_vault(abi.encodeWithSelector(IERC7575.maxMint.selector, receiver));
     }
     function vault_maxWithdraw(address owner) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.maxWithdraw.selector, owner));
+        return _call_vault(abi.encodeWithSelector(IERC7575.maxWithdraw.selector, owner));
     }
     function vault_maxRedeem(address owner) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.maxRedeem.selector, owner));
+        return _call_vault(abi.encodeWithSelector(IERC7575.maxRedeem.selector, owner));
     }
 
     function vault_previewDeposit(uint assets) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.previewDeposit.selector, assets));
+        return _call_vault(abi.encodeWithSelector(IERC7575.previewDeposit.selector, assets));
     }
     function vault_previewMint(uint shares) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.previewMint.selector, shares));
+        return _call_vault(abi.encodeWithSelector(IERC7575.previewMint.selector, shares));
     }
     function vault_previewWithdraw(uint assets) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.previewWithdraw.selector, assets));
+        return _call_vault(abi.encodeWithSelector(IERC7575.previewWithdraw.selector, assets));
     }
     function vault_previewRedeem(uint shares) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.previewRedeem.selector, shares));
+        return _call_vault(abi.encodeWithSelector(IERC7575.previewRedeem.selector, shares));
     }
 
     function vault_deposit(uint assets, address receiver) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.deposit.selector, assets, receiver));
+        return _call_vault(abi.encodeWithSelector(IERC7575.deposit.selector, assets, receiver));
     }
     function vault_mint(uint shares, address receiver) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.mint.selector, shares, receiver));
+        return _call_vault(abi.encodeWithSelector(IERC7575.mint.selector, shares, receiver));
     }
     function vault_withdraw(uint assets, address receiver, address owner) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.withdraw.selector, assets, receiver, owner));
+        return _call_vault(abi.encodeWithSelector(IERC7575.withdraw.selector, assets, receiver, owner));
     }
     function vault_redeem(uint shares, address receiver, address owner) internal returns (uint) {
-        return _call_vault(abi.encodeWithSelector(IERC4626.redeem.selector, shares, receiver, owner));
+        return _call_vault(abi.encodeWithSelector(IERC7575.redeem.selector, shares, receiver, owner));
     }
 
     function _call_vault(bytes memory data) internal returns (uint) {

@@ -1,14 +1,14 @@
 // SPDX-License-Identifier: AGPL-3.0
 pragma solidity >=0.8.0 <0.9.0;
 
-import "./ERC4626.prop.sol";
+import "./ERC7575.prop.sol";
 
 interface IMockERC20 is IERC20 {
     function mint(address to, uint value) external;
     function burn(address from, uint value) external;
 }
 
-abstract contract ERC4626Test is ERC4626Prop {
+abstract contract ERC7575Test is ERC7575Prop {
     function setUp() public virtual;
 
     uint constant N = 4;
@@ -35,14 +35,14 @@ abstract contract ERC4626Test is ERC4626Prop {
             // shares
             uint shares = init.share[i];
             uint amount;
-            try IERC4626(_vault_).previewMint(shares) returns (uint256 result) {
+            try IERC7575(_vault_).previewMint(shares) returns (uint256 result) {
                 amount = result;
             } catch {
                 vm.assume(false);
             }
             try IMockERC20(_underlying_).mint(user, amount) {} catch { vm.assume(false); }
             _approve(_underlying_, user, _vault_, amount);
-            vm.prank(user); try IERC4626(_vault_).mint(shares, user) {} catch { vm.assume(false); }
+            vm.prank(user); try IERC7575(_vault_).mint(shares, user) {} catch { vm.assume(false); }
             // assets
             uint assets = init.asset[i];
             try IMockERC20(_underlying_).mint(user, assets) {} catch { vm.assume(false); }
@@ -176,7 +176,7 @@ abstract contract ERC4626Test is ERC4626Prop {
         address owner    = init.user[2];
         address other    = init.user[3];
         assets = bound(assets, 0, _max_withdraw(owner));
-        _approve(_vault_, owner, caller, type(uint).max);
+        _approve(_share_, owner, caller, type(uint).max);
         prop_previewWithdraw(caller, receiver, owner, other, assets);
     }
 
@@ -186,7 +186,7 @@ abstract contract ERC4626Test is ERC4626Prop {
         address receiver = init.user[1];
         address owner    = init.user[2];
         assets = bound(assets, 0, _max_withdraw(owner));
-        _approve(_vault_, owner, caller, allowance);
+        _approve(_share_, owner, caller, allowance);
         prop_withdraw(caller, receiver, owner, assets);
     }
 
@@ -198,10 +198,10 @@ abstract contract ERC4626Test is ERC4626Prop {
         assets = bound(assets, 0, _max_withdraw(owner));
         vm.assume(caller != owner);
         vm.assume(assets > 0);
-        _approve(_vault_, owner, caller, 0);
+        _approve(_share_, owner, caller, 0);
         vm.prank(caller);
         (bool success,) = _vault_.call(
-            abi.encodeWithSelector(IERC4626.withdraw.selector, assets, receiver, owner)
+            abi.encodeWithSelector(IERC7575.withdraw.selector, assets, receiver, owner)
         );
         assertFalse(success);
     }
@@ -224,7 +224,7 @@ abstract contract ERC4626Test is ERC4626Prop {
         address owner    = init.user[2];
         address other    = init.user[3];
         shares = bound(shares, 0, _max_redeem(owner));
-        _approve(_vault_, owner, caller, type(uint).max);
+        _approve(_share_, owner, caller, type(uint).max);
         prop_previewRedeem(caller, receiver, owner, other, shares);
     }
 
@@ -234,7 +234,7 @@ abstract contract ERC4626Test is ERC4626Prop {
         address receiver = init.user[1];
         address owner    = init.user[2];
         shares = bound(shares, 0, _max_redeem(owner));
-        _approve(_vault_, owner, caller, allowance);
+        _approve(_share_, owner, caller, allowance);
         prop_redeem(caller, receiver, owner, shares);
     }
 
@@ -246,10 +246,10 @@ abstract contract ERC4626Test is ERC4626Prop {
         shares = bound(shares, 0, _max_redeem(owner));
         vm.assume(caller != owner);
         vm.assume(shares > 0);
-        _approve(_vault_, owner, caller, 0);
+        _approve(_share_, owner, caller, 0);
         vm.prank(caller);
         (bool success,) = _vault_.call(
-            abi.encodeWithSelector(IERC4626.redeem.selector, shares, receiver, owner)
+            abi.encodeWithSelector(IERC7575.redeem.selector, shares, receiver, owner)
         );
         assertFalse(success);
     }
@@ -352,11 +352,11 @@ abstract contract ERC4626Test is ERC4626Prop {
 
     function _max_withdraw(address from) internal virtual returns (uint) {
         if (_unlimitedAmount) return type(uint).max;
-        return vault_convertToAssets(IERC20(_vault_).balanceOf(from)); // may be different from maxWithdraw(from)
+        return vault_convertToAssets(IERC20(_share_).balanceOf(from)); // may be different from maxWithdraw(from)
     }
 
     function _max_redeem(address from) internal virtual returns (uint) {
         if (_unlimitedAmount) return type(uint).max;
-        return IERC20(_vault_).balanceOf(from); // may be different from maxRedeem(from)
+        return IERC20(_share_).balanceOf(from); // may be different from maxRedeem(from)
     }
 }
